@@ -39,8 +39,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+import os
+
 # Bot configuration
-BOT_TOKEN = "7804137684:AAECd522V9bYDO64xN9HNqfaqEidG5yxuDk"  # Replace with your bot token
+BOT_TOKEN = os.getenv("BOT_TOKEN", "7804137684:AAECd522V9bYDO64xN9HNqfaqEidG5yxuDk")  # Use environment variable or default
 DOWNLOAD_DIR = Path("downloads")
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 
@@ -617,17 +619,17 @@ def create_progress_bar(progress: int, length: int = 15) -> str:
 
 def main() -> None:
     """Start the bot"""
-    if BOT_TOKEN == "YOUR_BOT_TOKEN ":
-        print("❌ Error: Please set your bot token in the BOT_TOKEN variable")
+    if BOT_TOKEN == "7804137684:AAECd522V9bYDO64xN9HNqfaqEidG5yxuDk" or not BOT_TOKEN:
+        print("❌ Error: Please set your bot token as an environment variable")
         return
-    
+
     # Create application with configurable API server
-    # Set to local server for better file handling (larger files, faster speeds)
+    # On hosting platforms like Pella.app, use official API by default
     import json
     try:
         with open('api_config.json', 'r') as config_file:
             config = json.load(config_file)
-            if config.get('use_local_api', True):
+            if config.get('use_local_api', False):  # Changed default to False for hosting
                 # For local API, construct the full base URL with bot prefix
                 base_url = f"{config.get('local_api_url', 'http://localhost:8081')}/bot"
                 print(f"[INFO] Using local API server: {base_url}")
@@ -637,9 +639,9 @@ def main() -> None:
                 print(f"[INFO] Using official API server: {base_url}")
         application = Application.builder().token(BOT_TOKEN).base_url(base_url).build()
     except FileNotFoundError:
-        # Fallback to local API if config file doesn't exist
-        base_url = "http://localhost:8081/bot"
-        print(f"[INFO] Using local API server: {base_url}")
+        # Fallback to official API if config file doesn't exist
+        base_url = "https://api.telegram.org/bot"
+        print(f"[INFO] Using official API server: {base_url}")
         application = Application.builder().token(BOT_TOKEN).base_url(base_url).build()
     
     # Conversation handler for download process
