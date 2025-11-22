@@ -1,0 +1,5 @@
+{
+  "use_local_api": true,
+  "local_api_url": "http://localhost:8081",
+  "official_api_url": "https://api.telegram.org"
+}
