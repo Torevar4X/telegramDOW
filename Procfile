@@ -1,1 +1,1 @@
-worker: python telegram_download_bot.py
+worker: python3 telegram_download_bot.py
