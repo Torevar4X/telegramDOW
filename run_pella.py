@@ -31,16 +31,46 @@ def download_telegram_api_server():
     # Construct download URL based on OS
     if os_name == "windows":
         url = "https://github.com/tdlib/telegram-bot-api/releases/latest/download/telegram-bot-api-windows.zip"
-        api_dir = "telegram-bot-api-windows"
         binary_name = "telegram-bot-api.exe"
     elif os_name == "linux":
-        # Pella runs on Linux
-        url = "https://github.com/tdlib/telegram-bot-api/releases/latest/download/telegram-bot-api-linux"
-        api_dir = "telegram-bot-api-linux"
+        # Pella runs on Linux - checking latest release for the Linux binary
+        try:
+            import requests
+            # Get the latest release info from GitHub
+            response = requests.get("https://api.github.com/repos/tdlib/telegram-bot-api/releases/latest")
+            if response.status_code == 200:
+                release = response.json()
+                # Find the asset for Linux
+                assets = release.get("assets", [])
+                linux_asset = None
+                for asset in assets:
+                    # Look for assets that match linux and are not debug builds
+                    if "linux" in asset["name"].lower() and "static" in asset["name"].lower():
+                        linux_asset = asset["browser_download_url"]
+                        break
+
+                # If no static build found, try to find any linux binary
+                if not linux_asset:
+                    for asset in assets:
+                        if "linux" in asset["name"].lower():
+                            linux_asset = asset["browser_download_url"]
+                            break
+
+                if linux_asset:
+                    url = linux_asset
+                else:
+                    # Fallback to a known URL pattern if no specific asset found
+                    url = "https://github.com/tdlib/telegram-bot-api/releases/latest/download/telegram-bot-api-linux"
+            else:
+                # If GitHub API request fails, use the generic URL
+                url = "https://github.com/tdlib/telegram-bot-api/releases/latest/download/telegram-bot-api-linux"
+        except Exception:
+            # If there's an error getting the release info, use the generic URL
+            url = "https://github.com/tdlib/telegram-bot-api/releases/latest/download/telegram-bot-api-linux"
+
         binary_name = "telegram-bot-api"
     elif os_name == "darwin":  # macOS
         url = "https://github.com/tdlib/telegram-bot-api/releases/latest/download/telegram-bot-api-macos"
-        api_dir = "telegram-bot-api-macos"
         binary_name = "telegram-bot-api"
     else:
         print(f"❌ Unsupported OS: {os_name}")
@@ -64,7 +94,7 @@ def download_telegram_api_server():
         import tarfile
 
         # Download the file
-        download_path = api_path / f"telegram-api-{os_name}.{'zip' if os_name == 'windows' else 'tar.gz'}"
+        download_path = api_path / f"telegram-api-{os_name}.{'zip' if os_name == 'windows' else '.tar.gz'}"
         print(f"Downloading from: {url}")
         urllib.request.urlretrieve(url, download_path)
 
@@ -73,31 +103,66 @@ def download_telegram_api_server():
             with zipfile.ZipFile(download_path, 'r') as zip_ref:
                 zip_ref.extractall(api_path)
         else:
-            with tarfile.open(download_path, 'r:gz') as tar_ref:
-                tar_ref.extractall(api_path)
-
-        # Move the binary to the expected location
-        bin_dir = api_path / "bin"
-        bin_dir.mkdir(exist_ok=True)
-
-        # Find the binary and move it to bin directory
-        for file_path in api_path.rglob(binary_name):
-            if file_path.is_file():
+            # For Linux and macOS, the download is usually a binary file, not an archive
+            # So we should check if the downloaded file is the binary itself
+            if is_binary_file(download_path):
+                # If it's already a binary, copy it directly to the bin directory
+                bin_dir = api_path / "bin"
+                bin_dir.mkdir(exist_ok=True)
                 dest_path = bin_dir / binary_name
-                file_path.rename(dest_path)
+                import shutil
+                shutil.move(download_path, dest_path)
                 print(f"✅ Telegram Bot API server installed to: {dest_path}")
-                break
-        else:
-            print(f"❌ Could not find {binary_name} in the downloaded archive")
-            return False
 
-        # Make it executable on Unix systems
-        if os_name != "windows":
-            dest_path.chmod(0o755)
+                # Make it executable on Unix systems
+                if os_name != "windows":
+                    dest_path.chmod(0o755)
+
+                return True
+            else:
+                # If it's an archive, extract it
+                import tarfile
+                with tarfile.open(download_path, 'r:gz') as tar_ref:
+                    tar_ref.extractall(api_path)
+
+                # Move the binary to the expected location
+                bin_dir = api_path / "bin"
+                bin_dir.mkdir(exist_ok=True)
+
+                # Find the binary and move it to bin directory
+                for file_path in api_path.rglob(binary_name):
+                    if file_path.is_file():
+                        dest_path = bin_dir / binary_name
+                        file_path.rename(dest_path)
+                        print(f"✅ Telegram Bot API server installed to: {dest_path}")
+
+                        # Make it executable on Unix systems
+                        if os_name != "windows":
+                            dest_path.chmod(0o755)
+
+                        break
+                else:
+                    print(f"❌ Could not find {binary_name} in the downloaded archive")
+                    return False
 
         return True
     except Exception as e:
         print(f"❌ Error downloading Telegram Bot API server: {e}")
+        return False
+
+
+def is_binary_file(file_path):
+    """Check if a file is a binary executable"""
+    try:
+        with open(file_path, 'rb') as f:
+            chunk = f.read(1024)
+            # Check for common binary file signatures (magic numbers)
+            if chunk.startswith(b'\x7fELF'):  # ELF (Linux Executable)
+                return True
+            if chunk.startswith(b'MZ'):       # DOS/Windows Executable
+                return True
+        return False
+    except:
         return False
 
 
