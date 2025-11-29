@@ -45,30 +45,39 @@ def download_telegram_api_server():
                 linux_asset = None
                 for asset in assets:
                     # Look for assets that match linux and are not debug builds
-                    if "linux" in asset["name"].lower() and "static" in asset["name"].lower():
+                    asset_name_lower = asset["name"].lower()
+                    if ("linux" in asset_name_lower and
+                        "static" in asset_name_lower and
+                        "tar.gz" in asset_name_lower):
                         linux_asset = asset["browser_download_url"]
                         break
 
                 # If no static build found, try to find any linux binary
                 if not linux_asset:
                     for asset in assets:
-                        if "linux" in asset["name"].lower():
+                        asset_name_lower = asset["name"].lower()
+                        if "linux" in asset_name_lower and not "debug" in asset_name_lower:
                             linux_asset = asset["browser_download_url"]
                             break
 
                 if linux_asset:
                     url = linux_asset
+                    # Extract binary name from the URL
+                    binary_name = asset["name"].split('/')[-1]  # Get the original filename
                 else:
-                    # Fallback to a known URL pattern if no specific asset found
-                    url = "https://github.com/tdlib/telegram-bot-api/releases/latest/download/telegram-bot-api-linux"
+                    # Fallback if no Linux asset is found
+                    print("❌ No suitable Linux binary found in GitHub releases")
+                    return False
             else:
-                # If GitHub API request fails, use the generic URL
-                url = "https://github.com/tdlib/telegram-bot-api/releases/latest/download/telegram-bot-api-linux"
-        except Exception:
-            # If there's an error getting the release info, use the generic URL
-            url = "https://github.com/tdlib/telegram-bot-api/releases/latest/download/telegram-bot-api-linux"
+                # If GitHub API request fails
+                print("❌ Could not fetch release info from GitHub")
+                return False
+        except Exception as e:
+            # If there's an error getting the release info
+            print(f"❌ Error fetching release info: {e}")
+            return False
 
-        binary_name = "telegram-bot-api"
+        binary_name = "telegram-bot-api"  # Override to use the standard name after extraction
     elif os_name == "darwin":  # macOS
         url = "https://github.com/tdlib/telegram-bot-api/releases/latest/download/telegram-bot-api-macos"
         binary_name = "telegram-bot-api"
@@ -93,57 +102,72 @@ def download_telegram_api_server():
         import zipfile
         import tarfile
 
-        # Download the file
-        download_path = api_path / f"telegram-api-{os_name}.{'zip' if os_name == 'windows' else '.tar.gz'}"
+        # Determine the extension for the downloaded file
+        if os_name == "windows":
+            download_ext = ".zip"
+        elif "tar.gz" in url.lower():
+            download_ext = ".tar.gz"
+        elif "tar.xz" in url.lower():
+            download_ext = ".tar.xz"
+        else:
+            # For Linux, the binary might be directly downloadable
+            download_ext = ""
+
+        download_path = api_path / f"telegram-api-{os_name}{download_ext}"
         print(f"Downloading from: {url}")
         urllib.request.urlretrieve(url, download_path)
 
-        # Extract the archive
+        # Extract the archive or handle the binary
         if os_name == "windows":
             with zipfile.ZipFile(download_path, 'r') as zip_ref:
                 zip_ref.extractall(api_path)
         else:
-            # For Linux and macOS, the download is usually a binary file, not an archive
-            # So we should check if the downloaded file is the binary itself
-            if is_binary_file(download_path):
-                # If it's already a binary, copy it directly to the bin directory
+            # For Linux and macOS, determine if the download is an archive or binary
+            if is_binary_file(download_path) and os_name != "windows":
+                # If it's already a binary executable, copy it directly to the bin directory
                 bin_dir = api_path / "bin"
                 bin_dir.mkdir(exist_ok=True)
-                dest_path = bin_dir / binary_name
+                dest_path = bin_dir / "telegram-bot-api"  # Use standard name
                 import shutil
                 shutil.move(download_path, dest_path)
                 print(f"✅ Telegram Bot API server installed to: {dest_path}")
 
                 # Make it executable on Unix systems
-                if os_name != "windows":
-                    dest_path.chmod(0o755)
+                dest_path.chmod(0o755)
 
                 return True
             else:
-                # If it's an archive, extract it
-                import tarfile
-                with tarfile.open(download_path, 'r:gz') as tar_ref:
-                    tar_ref.extractall(api_path)
+                # It's an archive, so extract it
+                if download_ext == ".tar.gz":
+                    import tarfile
+                    with tarfile.open(download_path, 'r:gz') as tar_ref:
+                        tar_ref.extractall(api_path)
+                elif download_ext == ".tar.xz":
+                    import tarfile
+                    with tarfile.open(download_path, 'r:xz') as tar_ref:
+                        tar_ref.extractall(api_path)
+                elif download_ext == ".zip":
+                    with zipfile.ZipFile(download_path, 'r') as zip_ref:
+                        zip_ref.extractall(api_path)
 
-                # Move the binary to the expected location
+                # Find the binary file in the extracted content and move it to bin
                 bin_dir = api_path / "bin"
                 bin_dir.mkdir(exist_ok=True)
 
-                # Find the binary and move it to bin directory
-                for file_path in api_path.rglob(binary_name):
-                    if file_path.is_file():
-                        dest_path = bin_dir / binary_name
+                # Look for the telegram-bot-api binary in the extracted files
+                for file_path in api_path.rglob("*"):
+                    if file_path.is_file() and "telegram-bot-api" in file_path.name and not file_path.name.endswith(('.tar.gz', '.zip', '.tar.xz')):
+                        dest_path = bin_dir / "telegram-bot-api"
                         file_path.rename(dest_path)
                         print(f"✅ Telegram Bot API server installed to: {dest_path}")
 
                         # Make it executable on Unix systems
-                        if os_name != "windows":
-                            dest_path.chmod(0o755)
+                        dest_path.chmod(0o755)
 
-                        break
-                else:
-                    print(f"❌ Could not find {binary_name} in the downloaded archive")
-                    return False
+                        return True
+
+                print(f"❌ Could not find telegram-bot-api binary in the extracted files")
+                return False
 
         return True
     except Exception as e:
@@ -289,19 +313,27 @@ def main():
     # Set the bot token in environment for the bot script to use
     os.environ["BOT_TOKEN"] = bot_token
     
-    # If API credentials are provided, start local API server
+    # If API credentials are provided, try to start local API server
     if api_id and api_hash:
         print(f"✅ Using local API with provided credentials")
-        
+
         # Start the local API server in a subprocess
         api_process = run_local_api_server(api_id, api_hash)
         if not api_process:
-            print("❌ Failed to start local API server, falling back to official API")
+            print("⚠️  Local API server setup failed, falling back to official API")
+            print("💡 This is normal on some hosting platforms that restrict additional processes")
+            print("   Your bot will still work but with standard Telegram file size limits (50-100MB)")
             setup_config(use_local_api=False)
+
+            # Run the bot with official API
+            try:
+                run_bot()
+            except KeyboardInterrupt:
+                print("\n🛑 Bot stopped by user")
         else:
             print("⏳ Waiting for API server to be ready...")
             time.sleep(5)  # Give the server time to fully initialize
-            
+
             # Run the bot in the main thread
             try:
                 run_bot_with_local_api()
@@ -314,11 +346,11 @@ def main():
                     print("🛑 API server stopped")
     else:
         # Run without local API server (using official API)
-        print("⚠️  API credentials not provided, using official Telegram API")
-        print("This limits file size to 50MB-100MB instead of 2GB+ with local API")
-        
+        print("ℹ️  No API credentials provided, using official Telegram API")
+        print("   File size limit: 50-100MB")
+
         setup_config(use_local_api=False)
-        
+
         # Run the bot
         try:
             run_bot()
