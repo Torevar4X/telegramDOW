@@ -21,19 +21,127 @@ import threading
 from telegram_download_bot import main as run_bot
 
 
+def build_telegram_api_server():
+    """Build the Telegram Bot API server from source"""
+    import subprocess
+    import os
+
+    # Determine OS
+    os_name = platform.system().lower()
+
+    if os_name != "linux":
+        print(f"❌ Building from source is only supported on Linux. Current OS: {os_name}")
+        return False
+
+    print("🔨 Building Telegram Bot API server from source...")
+
+    # Create API directory if it doesn't exist
+    api_path = Path("telegram-bot-api-source")
+    api_path.mkdir(exist_ok=True)
+
+    # Check if already built
+    binary_path = api_path / "inst" / "bin" / "telegram-bot-api"
+    if binary_path.exists():
+        print("✅ Telegram Bot API server already built!")
+        # Copy to expected location
+        expected_path = Path("telegram-bot-api") / "bin" / "telegram-bot-api"
+        expected_path.parent.mkdir(parents=True, exist_ok=True)
+        import shutil
+        shutil.copy2(binary_path, expected_path)
+        expected_path.chmod(0o755)
+        return True
+
+    try:
+        # Run the build commands
+        build_dir = api_path / "build"
+        source_dir = api_path
+
+        print("📦 Cloning telegram-bot-api repository...")
+        result = subprocess.run([
+            "git", "clone", "--recursive", "https://github.com/tdlib/telegram-bot-api.git", str(source_dir)
+        ], capture_output=True, text=True, timeout=300)  # 5 minute timeout
+
+        if result.returncode != 0:
+            print(f"❌ Git clone failed: {result.stderr}")
+            return False
+
+        print("🔧 Creating build directory...")
+        build_dir.mkdir(exist_ok=True)
+
+        print("⚙️ Running cmake configuration...")
+        result = subprocess.run([
+            "cmake", "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_INSTALL_PREFIX=../inst", ".."
+        ], cwd=build_dir, capture_output=True, text=True, timeout=300)
+
+        if result.returncode != 0:
+            print(f"❌ CMake configuration failed: {result.stderr}")
+            return False
+
+        print("🏗️ Building the project...")
+        result = subprocess.run([
+            "cmake", "--build", ".", "--target", "install"
+        ], cwd=build_dir, capture_output=True, text=True, timeout=1800)  # 30 minute timeout
+
+        if result.returncode != 0:
+            print(f"❌ Build failed: {result.stderr}")
+            return False
+
+        print("✅ Build completed successfully!")
+
+        # Copy to expected location
+        expected_path = Path("telegram-bot-api") / "bin" / "telegram-bot-api"
+        expected_path.parent.mkdir(parents=True, exist_ok=True)
+        import shutil
+        if binary_path.exists():
+            shutil.copy2(binary_path, expected_path)
+            expected_path.chmod(0o755)
+            print(f"✅ Telegram Bot API server installed to: {expected_path}")
+            return True
+        else:
+            print(f"❌ Expected binary not found at {binary_path}")
+            return False
+
+    except subprocess.TimeoutExpired:
+        print("❌ Build process timed out")
+        return False
+    except Exception as e:
+        print(f"❌ Error building Telegram Bot API server: {e}")
+        return False
+
+
 def download_telegram_api_server():
-    """Download the Telegram Bot API server if not already present"""
+    """Download or build the Telegram Bot API server if not already present"""
+    import subprocess
 
     # Determine OS and architecture
     os_name = platform.system().lower()
-    arch = platform.machine().lower()
+
+    print(f"📦 Setting up Telegram Bot API server for {os_name}...")
+
+    # Create API directory if it doesn't exist
+    api_path = Path("telegram-bot-api")
+    api_path.mkdir(exist_ok=True)
+
+    # Check if binary already exists
+    binary_path = api_path / "bin" / "telegram-bot-api"
+    if binary_path.exists():
+        print("✅ Telegram Bot API server already exists!")
+        return True
+
+    # Try building from source first (for Linux environments like Pella)
+    if os_name == "linux":
+        print(" attempting to build from source...")
+        if build_telegram_api_server():
+            return True
+        else:
+            print("⚠️ Building from source failed, trying download approach...")
 
     # Construct download URL based on OS
     if os_name == "windows":
         url = "https://github.com/tdlib/telegram-bot-api/releases/latest/download/telegram-bot-api-windows.zip"
         binary_name = "telegram-bot-api.exe"
     elif os_name == "linux":
-        # Pella runs on Linux - checking latest release for the Linux binary
+        # Try to get the correct Linux binary from GitHub releases
         try:
             import requests
             # Get the latest release info from GitHub
@@ -62,8 +170,6 @@ def download_telegram_api_server():
 
                 if linux_asset:
                     url = linux_asset
-                    # Extract binary name from the URL
-                    binary_name = asset["name"].split('/')[-1]  # Get the original filename
                 else:
                     # Fallback if no Linux asset is found
                     print("❌ No suitable Linux binary found in GitHub releases")
@@ -87,12 +193,7 @@ def download_telegram_api_server():
 
     print(f"⬇️ Downloading Telegram Bot API server for {os_name}...")
 
-    # Create API directory if it doesn't exist
-    api_path = Path("telegram-bot-api")
-    api_path.mkdir(exist_ok=True)
-
-    # Check if binary already exists
-    binary_path = api_path / "bin" / binary_name
+    # Check if binary already exists (after build attempt)
     if binary_path.exists():
         print("✅ Telegram Bot API server already exists!")
         return True
@@ -172,6 +273,21 @@ def download_telegram_api_server():
         return True
     except Exception as e:
         print(f"❌ Error downloading Telegram Bot API server: {e}")
+        return False
+
+
+def is_binary_file(file_path):
+    """Check if a file is a binary executable"""
+    try:
+        with open(file_path, 'rb') as f:
+            chunk = f.read(1024)
+            # Check for common binary file signatures (magic numbers)
+            if chunk.startswith(b'\x7fELF'):  # ELF (Linux Executable)
+                return True
+            if chunk.startswith(b'MZ'):       # DOS/Windows Executable
+                return True
+        return False
+    except:
         return False
 
 
