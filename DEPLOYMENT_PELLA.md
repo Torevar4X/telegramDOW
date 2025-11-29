@@ -64,8 +64,14 @@ The project is already configured to work on Pella.app:
 
 - The bot can use either the official Telegram API or a local API server:
   - With only `BOT_TOKEN`: Uses official API with 50-100MB file size limit
-  - With `BOT_TOKEN`, `API_ID`, and `API_HASH`: Uses local API with up to 2GB file size limit
+  - With `BOT_TOKEN`, `API_ID`, and `API_HASH`: Tries to use local API with up to 2GB file size limit
   - The `run_pella.py` script automatically handles which configuration to use based on available environment variables
+
+- When using local API on Pella:
+  - The script attempts to download and run the Telegram Bot API server automatically
+  - Some hosting platforms may have restrictions that prevent running additional processes
+  - If the local API server fails to start, the bot will automatically fall back to the official API
+  - Monitor your deployment logs to see which mode is active
 
 - Remember to secure your bot token and API credentials and never commit them to version control.
 
