@@ -18,14 +18,21 @@ To deploy this bot on Pella.app, follow these steps:
 
 ### 1. Environment Setup
 
-Set the following environment variable on Pella.app:
+Set the following environment variables on Pella.app:
 - `BOT_TOKEN`: Your Telegram bot token from @BotFather
+- (Optional) `API_ID` and `API_HASH`: Your API credentials from https://my.telegram.org for larger file support (up to 2GB files)
 
 ### 2. Configuration
 
-The bot is configured to use the official Telegram API by default when deployed, which works well with hosting platforms like Pella.app. The file size limit is 50MB-100MB on the official API, compared to 2GB with a local API server.
+The bot can be configured in two ways:
+- With only `BOT_TOKEN`: Uses official API with 50-100MB file size limit
+- With `BOT_TOKEN`, `API_ID`, and `API_HASH`: Uses local API with up to 2GB file size limit
 
-### 3. Requirements
+### 3. Running the Bot
+
+Use the `run_pella.py` file as the main entry point when deploying on Pella.app. This single Python file handles both the local API server (if credentials provided) and the bot as required by Pella.
+
+### 4. Requirements
 
 The bot requires the following dependencies:
 - python-telegram-bot
@@ -34,10 +41,6 @@ The bot requires the following dependencies:
 - validators
 
 These are specified in the `requirements.txt` file.
-
-### 4. Running the Bot
-
-The bot will automatically start when deployed on Pella.app using the main entry point in `telegram_download_bot.py`.
 
 ## Local Installation (for reference)
 
@@ -56,7 +59,12 @@ If you want to run this bot locally with enhanced capabilities:
    export BOT_TOKEN="your_bot_token_here"
    ```
 
-4. Run the bot:
+4. Run the bot using the Pella deployment script (which works locally too):
+   ```bash
+   python run_pella.py
+   ```
+
+Or run directly:
    ```bash
    python telegram_download_bot.py
    ```

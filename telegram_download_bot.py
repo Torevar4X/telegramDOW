@@ -42,7 +42,10 @@ logger = logging.getLogger(__name__)
 import os
 
 # Bot configuration
-BOT_TOKEN = os.getenv("BOT_TOKEN", "7804137684:AAECd522V9bYDO64xN9HNqfaqEidG5yxuDk")  # Use environment variable or default
+# Get your bot token from @BotFather on Telegram and set it as an environment variable
+# On Windows: set BOT_TOKEN=your_bot_token_here
+# On Linux/Mac: export BOT_TOKEN=your_bot_token_here
+BOT_TOKEN = os.getenv("BOT_TOKEN")  # Use environment variable only, no default
 DOWNLOAD_DIR = Path("downloads")
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 
@@ -619,8 +622,11 @@ def create_progress_bar(progress: int, length: int = 15) -> str:
 
 def main() -> None:
     """Start the bot"""
-    if BOT_TOKEN == "7804137684:AAECd522V9bYDO64xN9HNqfaqEidG5yxuDk" or not BOT_TOKEN:
+    if not BOT_TOKEN:
         print("❌ Error: Please set your bot token as an environment variable")
+        print("Get a bot token from @BotFather on Telegram and set it as an environment variable")
+        print("On Windows: set BOT_TOKEN=your_bot_token_here")
+        print("On Linux/Mac: export BOT_TOKEN=your_bot_token_here")
         return
 
     # Create application with configurable API server
