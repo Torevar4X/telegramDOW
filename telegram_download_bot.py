@@ -436,17 +436,17 @@ async def start_download(
             frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
             frame_idx = 0
             last_update = 0
-            
+
             while animation_active[0]:
                 elapsed = int(asyncio.get_event_loop().time() - upload_start_time)
                 minutes = elapsed // 60
                 seconds = elapsed % 60
-                
-                # Update every 2 seconds to avoid rate limits
-                if elapsed - last_update >= 2:
+
+                # Update every 10 seconds to significantly reduce rate limiting issues
+                if elapsed - last_update >= 10:
                     last_update = elapsed
                     frame_idx = (frame_idx + 1) % len(frames)
-                    
+
                     if status_msg:
                         try:
                             await status_msg.edit_text(
@@ -457,10 +457,11 @@ async def start_download(
                                 f"⏳ Please wait, do not close the bot...",
                                 parse_mode=ParseMode.HTML
                             )
-                        except Exception:
-                            pass
-                
-                await asyncio.sleep(1)
+                        except Exception as e:
+                            # Log the error but continue
+                            logger.warning(f"Failed to update progress message: {e}")
+
+                await asyncio.sleep(2)  # Sleep longer between checks to reduce resource usage
         
         while retry_count < max_retries and not upload_success:
             try:
@@ -468,15 +469,16 @@ async def start_download(
                 if status_msg:
                     animation_active[0] = True
                     upload_animation_task = asyncio.create_task(animate_upload_progress())
-                
+
                 # Calculate dynamic timeouts based on file size
                 # Assume minimum upload speed of 100KB/s (conservative)
                 estimated_time = file_size / (100 * 1024)
                 timeout_buffer = 600  # 10 minute buffer
-                
+
                 read_timeout = min(estimated_time + timeout_buffer, 7200)  # Max 2 hours
                 write_timeout = min(estimated_time + timeout_buffer, 7200)
-                
+
+                # Send document
                 with open(filepath, 'rb') as f:
                     await context.bot.send_document(
                         chat_id=chat_id,
@@ -488,16 +490,16 @@ async def start_download(
                         connect_timeout=60,
                         pool_timeout=60
                     )
-                
+
                 # Stop animation
                 animation_active[0] = False
                 if upload_animation_task:
                     await upload_animation_task
-                
+
                 upload_success = True
                 if status_msg:
                     await status_msg.delete()
-                
+
             except Exception as upload_error:
                 # Stop animation on error
                 animation_active[0] = False
@@ -506,14 +508,14 @@ async def start_download(
                         await upload_animation_task
                     except:
                         pass
-                
+
                 retry_count += 1
                 error_type = type(upload_error).__name__
-                
+
                 if retry_count < max_retries:
                     wait_time = retry_count * 10  # 10, 20, 30 seconds
                     logger.warning(f"Upload attempt {retry_count} failed: {error_type}. Retrying in {wait_time}s...")
-                    
+
                     if status_msg:
                         try:
                             await status_msg.edit_text(
@@ -525,9 +527,9 @@ async def start_download(
                             )
                         except Exception:
                             pass
-                    
+
                     await asyncio.sleep(wait_time)
-                    
+
                     # Reset timer for next attempt
                     upload_start_time = asyncio.get_event_loop().time()
                 else:
